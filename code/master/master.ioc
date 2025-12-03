@@ -1,16 +1,11 @@
 #include "../common.h"
 #include <Arduino.h>
-#include "wiring_private.h" // Konieczne dla pinPeripheral
+#include "wiring_private.h"
 
-// --- KONFIGURACJA SPRZĘTOWA DLA MKR WAN 1300 ---
-// Pin 0 (RX), Pin 1 (TX) -> SERCOM3
 Uart Serial2(&sercom3, 0, 1, SERCOM_RX_PAD_0, UART_TX_PAD_1);
 
-// Pin 2 (RX), Pin 3 (TX) -> SERCOM0
 Uart Serial3(&sercom0, 2, 3, SERCOM_RX_PAD_2, UART_TX_PAD_3);
 
-// --- HANDLERY PRZERWAŃ ---
-// Muszą być osobne dla każdego SERCOMu
 void SERCOM3_Handler() {
     Serial2.IrqHandler();
 }
@@ -23,14 +18,12 @@ const uint32_t MY_NODE_ID = ID_W0;
 unsigned long lastSeen[6];
 
 void setup() {
-    Serial.begin(UART_BAUD_RATE); // USB Monitor
+    Serial.begin(UART_BAUD_RATE);
     
-    // Konfiguracja PINÓW 0 i 1 pod SERCOM3
     pinPeripheral(0, PIO_SERCOM); 
     pinPeripheral(1, PIO_SERCOM); 
     Serial2.begin(UART_BAUD_RATE);
 
-    // Konfiguracja PINÓW 2 i 3 pod SERCOM0
     pinPeripheral(2, PIO_SERCOM);
     pinPeripheral(3, PIO_SERCOM);
     Serial3.begin(UART_BAUD_RATE);
@@ -41,12 +34,10 @@ void setup() {
 void loop() {
     DataFrame frame;
 
-    // Obsługa Serial2
     if (trySyncAndReadFrame(Serial2, frame)) {
         processFrame(frame);
     }
 
-    // Obsługa Serial3
     if (trySyncAndReadFrame(Serial3, frame)) {
         processFrame(frame);
     }
@@ -54,46 +45,26 @@ void loop() {
     checkSystemHealth();
 }
 
-// --- FUNKCJA ODBIORU Z KOREKCJĄ BŁĘDÓW ---
-// Próbuje znaleźć poprawną ramkę w strumieniu danych
 bool trySyncAndReadFrame(Uart &u, DataFrame &f) {
     if (u.available() < sizeof(DataFrame)) {
         return false;
     }
 
-    // Podglądamy dane (nie usuwając ich z bufora) - Arduino standardowo nie ma peek() dla bloku,
-    // więc musimy przeczytać, sprawdzić CRC i ewentualnie odrzucić tylko jeden bajt jeśli błąd.
-    
-    // 1. Czytamy całą potencjalną ramkę
     u.readBytes((uint8_t *)&f, sizeof(DataFrame));
 
-    // 2. Liczymy CRC
     uint16_t calcCRC = calculateCRC((uint8_t *)&f, sizeof(DataFrame) - sizeof(uint16_t));
 
-    // 3. Sprawdzamy zgodność
     if (calcCRC == f.crc) {
-        return true; // Sukces! Ramka poprawna
+        return true;
     } else {
-        // BŁĄD CRC - "Sliding Window"
-        // Ramka jest przesunięta. To, co przeczytaliśmy, jest śmieciem, 
-        // ale być może "prawdziwa" ramka zaczynała się 1 bajt później.
-        // Niestety, readBytes już "zjadło" dane.
-        // W prostych systemach bez nagłówka (Header bytes) trudno to naprawić idealnie.
-        
         Serial.println("CRC Error - Frame rejected");
-        
-        // Prostym fixem, aby uniknąć totalnego zatoru, jest wyczyszczenie bufora
-        // lub (lepiej) w następnej iteracji pętla sama się zsynchronizuje, 
-        // choć stracimy tę jedną ramkę.
         return false;
     }
 }
 
 void processFrame(DataFrame &frame) {
-    // Aktualizacja ścieżki
     frame.pathMask |= MY_NODE_ID;
 
-    // Logika Last Seen
     if (frame.senderID >= 1 && frame.senderID <= 5) {
         lastSeen[frame.senderID] = millis();
     }
@@ -107,7 +78,6 @@ void printDataToUSB(DataFrame f) {
     Serial.print(" | ADC: ");
     Serial.print(f.measurement);
     Serial.print(" | Sciezka: ");
-    // Wyświetlanie binarne z wiodącymi zerami dla czytelności (opcjonalne)
     for (int i = 5; i >= 0; i--) {
         Serial.print((f.pathMask >> i) & 1);
     }
@@ -118,11 +88,9 @@ void checkSystemHealth() {
     static unsigned long lastCheck = 0;
     unsigned long now = millis();
 
-    // Sprawdzaj co 1 sekundę, nie w każdym obiegu pętli (żeby nie spamować UART)
     if (now - lastCheck > 1000) {
         lastCheck = now;
         for (int i = 1; i <= 5; i++) {
-            // Jeśli węzeł nie był widziany przez 10 sekund (dajmy margines) i kiedykolwiek był widziany
             if (lastSeen[i] != 0 && (now - lastSeen[i] > 10000)) {
                 Serial.print("!!! ALARM: Utracono kontakt z S");
                 Serial.println(i);
