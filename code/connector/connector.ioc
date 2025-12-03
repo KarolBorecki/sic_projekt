@@ -4,6 +4,8 @@
 const uint32_t MY_NODE_ID = ID_W3;
 const int MY_I2C_ADDR = (MY_NODE_ID == ID_W3) ? W3_NR : W4_NR;
 
+Uart Serial2(&sercom1, 0, 1, SERCOM_RX_PAD_1, UART_TX_PAD_0);
+
 #define UART_TX_PIN 14
 #define UART_RX_PIN 13
 
@@ -13,9 +15,18 @@ volatile bool packetReady = false;
 volatile uint8_t i2cBuffer[64];
 DataFrame bufferFrame;
 
+void SERCOM1_Handler()
+{
+    Serial2.IrqHandler();
+}
+
 void setup()
 {
     Serial.begin(UART_BAUD_RATE);
+    
+    pinPeripheral(0, PIO_SERCOM);   // RX
+    pinPeripheral(1, PIO_SERCOM);   // TX
+    Serial2.begin(UART_BAUD_RATE);
 
     Wire.begin(MY_I2C_ADDR);
     Wire.onReceive(receiveEventI2C);

@@ -1,5 +1,6 @@
 #include "../common.h"
 #include <Wire.h>
+#include <SPI.h>
 
 const uint32_t MY_NODE_ID = ID_W1;
 
@@ -12,106 +13,60 @@ volatile uint8_t spiBuffer[sizeof(DataFrame)];
 volatile uint16_t spiIndex = 0;
 volatile bool frameReady = false;
 
-void SERCOM2_Handler() {
-    if (SERCOM2->SPI.INTFLAG.bit.RXC) {
-        uint8_t data = SERCOM2->SPI.DATA.reg;
-
-        if (spiIndex < sizeof(DataFrame)) {
-            spiBuffer[spiIndex++] = data;
-        }
-
-        SERCOM2->SPI.DATA.reg = 0x00;
-    }
-
-    if (SERCOM2->SPI.INTFLAG.bit.SSL) {
-        spiIndex = 0;
-        SERCOM2->SPI.INTFLAG.reg = SERCOM_SPI_INTFLAG_SSL;
-    }
-
-    if (SERCOM2->SPI.INTFLAG.bit.TXC) {
-        // End of frame likely when SS goes HIGH
-        if (spiIndex == sizeof(DataFrame)) {
-            frameReady = true;
-        }
-        SERCOM2->SPI.INTFLAG.reg = SERCOM_SPI_INTFLAG_TXC;
-    }
-}
-
-void setupSPI_slave() {
-    // ----- CLOCK -----
-    GCLK->CLKCTRL.reg = GCLK_CLKCTRL_ID(SERCOM2_GCLK_ID_CORE) |
-                        GCLK_CLKCTRL_GEN_GCLK0 |
-                        GCLK_CLKCTRL_CLKEN;
-    while (GCLK->STATUS.bit.SYNCBUSY);
-
-    // ----- PIN CONFIG -----
-    pinMode(PIN_SPI_MISO, OUTPUT);
-    pinMode(PIN_SPI_MOSI, INPUT);
-    pinMode(PIN_SPI_SCK, INPUT);
-    pinMode(PIN_SPI_SS, INPUT);
-
-    // MISO → PA18, function C (SERCOM2 PAD[2])
-    PORT->Group[0].PINCFG[18].bit.PMUXEN = 1;
-    PORT->Group[0].PMUX[18 >> 1].reg |= PORT_PMUX_PMUXE_C;
-
-    // MOSI → PA16, function C, PAD[0]
-    PORT->Group[0].PINCFG[16].bit.PMUXEN = 1;
-    PORT->Group[0].PMUX[16 >> 1].reg |= PORT_PMUX_PMUXE_C;
-
-    // SCK → PA17, function C, PAD[1]
-    PORT->Group[0].PINCFG[17].bit.PMUXEN = 1;
-    PORT->Group[0].PMUX[17 >> 1].reg |= PORT_PMUX_PMUXO_C;
-
-    // SS → PA14, function C, pad irrelevant (SSL pin)
-    PORT->Group[0].PINCFG[14].bit.PMUXEN = 1;
-    PORT->Group[0].PMUX[14 >> 1].reg |= PORT_PMUX_PMUXE_C;
-
-    // ----- SPI CONFIG -----
-    SERCOM2->SPI.CTRLA.reg =
-        SERCOM_SPI_CTRLA_MODE_SPI_SLAVE |
-        SERCOM_SPI_CTRLA_DIPO(0) |   // MOSI on PAD[0]
-        SERCOM_SPI_CTRLA_DOPO(2) |   // MISO on PAD[2]
-        SERCOM_SPI_CTRLA_FORM(0) |   // SPI Frame
-        SERCOM_SPI_CTRLA_CPHA |      // MODE0
-        0;
-
-    SERCOM2->SPI.CTRLB.reg =
-        SERCOM_SPI_CTRLB_RXEN |
-        SERCOM_SPI_CTRLB_SSDE;       // detect SS low
-
-    while (SERCOM2->SPI.SYNCBUSY.bit.CTRLB);
-
-    // Enable interrupts: RX, SSL, TX complete
-    SERCOM2->SPI.INTENSET.reg =
-        SERCOM_SPI_INTENSET_RXC |
-        SERCOM_SPI_INTENSET_SSL |
-        SERCOM_SPI_INTENSET_TXC;
-
-    NVIC_EnableIRQ(SERCOM2_IRQn);
-
-    SERCOM2->SPI.CTRLA.bit.ENABLE = 1;
-    while (SERCOM2->SPI.SYNCBUSY.bit.ENABLE);
-}
-
 void setup() {
     Serial.begin(UART_BAUD_RATE);
     Wire.begin();
 
-    setupSPI_slave();
- }
+    // --- SPI MASTER setup ---
+    pinMode(PIN_SPI_SS, OUTPUT);
+    digitalWrite(PIN_SPI_SS, HIGH);   // deselect slave
+
+    SPI.begin();                      // start SPI in MASTER mode
+    SPI.beginTransaction(SPISettings(
+        1'000'000,                    // clock
+        MSBFIRST,
+        SPI_MODE0
+    ));
+}
+
+bool readSpiFrame() {
+    if (frameReady) return true;
+
+    digitalWrite(PIN_SPI_SS, LOW);
+
+    // Odczyt pełnej ramki
+    for (; spiIndex < sizeof(DataFrame); spiIndex++) {
+        spiBuffer[spiIndex] = SPI.transfer(0xFF);  // dummy write
+    }
+
+    digitalWrite(PIN_SPI_SS, HIGH);
+
+    if (spiIndex >= sizeof(DataFrame)) {
+        frameReady = true;
+        spiIndex = 0;
+        return true;
+    }
+
+    return false;
+}
 
 void loop() {
-    if (frameReady) {
-        frameReady = false;
+    if (readSpiFrame()) {
 
         DataFrame frame;
         memcpy(&frame, (void*)spiBuffer, sizeof(DataFrame));
 
+        // Flag reset
+        frameReady = false;
+
+        // Update routing
         frame.pathMask |= MY_NODE_ID;
         frame.crc = calculateCRC((uint8_t*)&frame, sizeof(DataFrame) - sizeof(uint16_t));
 
+        // Routing logic
         if (MY_NODE_ID == ID_W1) {
             Serial.write((uint8_t*)&frame, sizeof(DataFrame));
+
             Wire.beginTransmission(W4_NR);
             Wire.write((uint8_t*)&frame, sizeof(DataFrame));
             Wire.endTransmission();

@@ -2,7 +2,6 @@
 #include <Arduino.h>
 #include "wiring_private.h"
 
-
 Uart Serial2(&sercom1, 0, 1, SERCOM_RX_PAD_1, UART_TX_PAD_0);
 Uart Serial3(&sercom2, 2, 3, SERCOM_RX_PAD_1, UART_TX_PAD_0);
 
