@@ -1,6 +1,6 @@
 #include "../common.h"
+#include <SPI.h>
 
-// TODO: MODYFIY!!!
 const uint32_t MY_NODE_ID = ID_S1;
 const int CS_PIN = 10;
 
@@ -22,7 +22,9 @@ void loop()
     frame.crc = calculateCRC((uint8_t *)&frame, sizeof(DataFrame) - sizeof(uint16_t));
 
     digitalWrite(CS_PIN, LOW);
+    SPI.beginTransaction(SPISettings(100000, MSBFIRST, SPI_MODE0));
     SPI.transfer((uint8_t *)&frame, sizeof(DataFrame));
+    SPI.endTransaction();
     digitalWrite(CS_PIN, HIGH);
 
     delay(1000);

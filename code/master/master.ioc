@@ -1,29 +1,69 @@
 #include "../common.h"
+#include <Arduino.h>
+#include "wiring_private.h"
+
+
+Uart Serial2(&sercom1, 0, 1, SERCOM_RX_PAD_1, UART_TX_PAD_0);
+Uart Serial3(&sercom2, 2, 3, SERCOM_RX_PAD_1, UART_TX_PAD_0);
+
+void SERCOM1_Handler()
+{
+    Serial2.IrqHandler();
+    Serial3.IrqHandler();
+}
 
 const uint32_t MY_NODE_ID = ID_W0;
 
-unsigned long lastSeen[6]; // 1-5 is for S1-S5, 
+unsigned long lastSeen[6];
 
 void setup()
 {
-  Serial.begin(UART_BAUD_RATE);
+  Serial.begin(UART_BAUD_RATE); // USB Monitor
 
-  pinMode(MISO, OUTPUT);
-  SPI.begin();
+  pinPeripheral(0, PIO_SERCOM);   // RX
+  pinPeripheral(1, PIO_SERCOM);   // TX
+  Serial2.begin(UART_BAUD_RATE);
+
+  pinPeripheral(2, PIO_SERCOM);   // RX
+  pinPeripheral(3, PIO_SERCOM);   // TX
+  Serial3.begin(UART_BAUD_RATE);
 }
 
 void loop()
 {
-  if (dataReceivedSPI())
+  if (Serial2.available() >= sizeof(DataFrame))
   {
-    DataFrame frame = readSPIFrame();
+    DataFrame frame;
+    Serial2.readBytes((uint8_t *)&frame, sizeof(DataFrame));
 
     uint16_t calcCRC = calculateCRC((uint8_t *)&frame, sizeof(DataFrame) - sizeof(uint16_t));
 
     if (calcCRC == frame.crc)
     {
       frame.pathMask |= MY_NODE_ID;
+      if (frame.senderID >= 1 && frame.senderID <= 5)
+      {
+        lastSeen[frame.senderID] = millis();
+      }
 
+      printDataToUSB(frame);
+    }
+    else
+    {
+      Serial.println("Błąd CRC ramki!");
+    }
+  }
+
+    if (Serial3.available() >= sizeof(DataFrame))
+  {
+    DataFrame frame;
+    Serial3.readBytes((uint8_t *)&frame, sizeof(DataFrame));
+
+    uint16_t calcCRC = calculateCRC((uint8_t *)&frame, sizeof(DataFrame) - sizeof(uint16_t));
+
+    if (calcCRC == frame.crc)
+    {
+      frame.pathMask |= MY_NODE_ID;
       if (frame.senderID >= 1 && frame.senderID <= 5)
       {
         lastSeen[frame.senderID] = millis();
@@ -59,15 +99,7 @@ void checkSystemHealth()
     {
       Serial.print("ALARM: Wezel S");
       Serial.print(i);
-      Serial.println(" nie odpowiada (USZKODZONY lub brak trasy)!");
+      Serial.println(" nie odpowiada!");
     }
   }
-}
-
-// TODO! implementacja
-bool dataReceivedSPI() { return false;  }
-DataFrame readSPIFrame()
-{
-  DataFrame f;
-  return f;
 }

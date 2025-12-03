@@ -10,6 +10,8 @@ struct DataFrame
     uint16_t crc;
 };
 
+#define UART_BAUD_RATE 9600
+
 #define S1_NR 0
 #define S2_NR 1
 #define S3_NR 2
