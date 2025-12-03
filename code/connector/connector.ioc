@@ -1,26 +1,20 @@
 #include "../common.h"
 #include <Wire.h>
-#include <SPI.h> // Często wymagane na MKR nawet jeśli nie używane bezpośrednio
+#include <SPI.h>
 
 const uint32_t MY_NODE_ID = ID_W3;
-// Wybór adresu I2C
 const int MY_I2C_ADDR = (MY_NODE_ID == ID_W3) ? W3_NR : W4_NR;
 
 const int DATAFRAME_SIZE = sizeof(DataFrame);
 
-// Flagi i bufory
 volatile bool packetReady = false;
-volatile DataFrame bufferFrame; // Bufor napełniany w przerwaniu
+volatile DataFrame bufferFrame;
 
 void setup() {
-    // 1. Debugging po USB (Komputer)
     Serial.begin(UART_BAUD_RATE);
     
-    // 2. Komunikacja z kolejnym węzłem (UART na pinach 13/14)
-    // Na MKR WAN 1300: Pin 13 (RX), Pin 14 (TX) to Serial1
     Serial1.begin(UART_BAUD_RATE);
 
-    // 3. Odbiór danych od poprzedniego węzła (I2C Slave)
     Wire.begin(MY_I2C_ADDR);
     Wire.onReceive(receiveEventI2C);
     
@@ -28,22 +22,17 @@ void setup() {
 }
 
 void loop() {
-    // Sprawdź, czy mamy nowe dane z I2C
     if (packetReady) {
         DataFrame frameToProcess;
 
-        // --- SEKCJA KRYTYCZNA START ---
-        // Wyłączamy przerwania na moment kopiowania, aby I2C nie nadpisało danych w połowie odczytu
         noInterrupts();
-        frameToProcess = bufferFrame; // Szybka kopia struktury
+        frameToProcess = bufferFrame;
         packetReady = false;
         interrupts();
-        // --- SEKCJA KRYTYCZNA STOP ---
 
         processAndForward(frameToProcess);
     }
     
-    // Opcjonalnie: Debugowanie - jeśli wyślesz coś z PC przez USB, też prześlij dalej
     if (Serial.available() >= DATAFRAME_SIZE) {
         DataFrame usbFrame;
         Serial.readBytes((char*)&usbFrame, DATAFRAME_SIZE);
@@ -51,15 +40,12 @@ void loop() {
     }
 }
 
-// Przerwanie I2C - działa w tle
 void receiveEventI2C(int howMany) {
     if (howMany < DATAFRAME_SIZE) {
-        // Zabezpieczenie: odczytaj i wyrzuć śmieci, jeśli ramka jest za krótka
         while(Wire.available()) Wire.read();
         return;
     }
 
-    // Rzutujemy wskaźnik na strukturę volatile, aby wpisać dane bajt po bajcie
     uint8_t* pBuffer = (uint8_t*)&bufferFrame;
     
     for (int i = 0; i < DATAFRAME_SIZE; i++) {
@@ -70,16 +56,12 @@ void receiveEventI2C(int howMany) {
 }
 
 void processAndForward(DataFrame f) {
-    // 1. Logika routingu - dodaj swoje ID
     f.pathMask |= MY_NODE_ID;
 
-    // 2. Przelicz CRC (konieczne po zmianie pathMask)
     f.crc = calculateCRC((uint8_t*)&f, DATAFRAME_SIZE - sizeof(uint16_t));
 
-    // 3. Wyślij do kolejnego węzła po UART (Serial1 - piny 13/14)
     Serial1.write((uint8_t*)&f, DATAFRAME_SIZE);
 
-    // 4. Logi na USB (dla podglądu na PC)
     Serial.print("Przekazano ramke od ID: ");
     Serial.println(f.senderID);
 }
