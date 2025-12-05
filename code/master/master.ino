@@ -62,15 +62,7 @@ void recieveStructure(byte *structurePointer,  int structureLength)
 
 void recieveStructure2(byte *structurePointer,  int structureLength)
 {
-    Serial1.readBytes(structurePointer, structureLength);
-}
-
-void sendStructure(byte *structurePointer, int structureLength)
-{
-        Serial1.write(structurePointer, structureLength);
-    Serial1.flush();
-            mySerial.write(structurePointer, structureLength);
-    mySerial.flush();
+    Serial.readBytes(structurePointer, structureLength);
 }
 
 void SERCOM3_Handler() {
@@ -78,7 +70,7 @@ void SERCOM3_Handler() {
 }
 
 void setup() {
-    Serial1.begin(9600);
+    Serial.begin(9600);
     mySerial.begin(9600);
     pinPeripheral(1, PIO_SERCOM); //Assign RX function to pin 1
     pinPeripheral(0, PIO_SERCOM); //Assign TX function to pin 0
@@ -88,20 +80,21 @@ void setup() {
 }
 
 void loop() {
+    Serial.println("Checking");
+    Serial.println(mySerial.available());
+    Serial.println(Serial.available());
     if (mySerial.available() >= sizeof(frame)) {
         recieveStructure((byte*)&frame, sizeof(frame));
-        // Serial.println("Data from 1");
-        // Serial.println(frame.measurement);
-        // Serial.println(frame.senderID);
-        sendStructure((byte*)&frame, sizeof(frame));  
+        Serial.println("Data from 1");
+        Serial.println(frame.measurement);
+        Serial.println(frame.senderID);
     } 
 
-    if (Serial1.available() >= sizeof(frame2)) {
+    if (Serial.available() >= sizeof(frame2)) {
         recieveStructure2((byte*)&frame2, sizeof(frame2));
-        // Serial.println("Data from 2");
-        // Serial.println(frame2.measurement);
-        // Serial.println(frame2.senderID);
-        sendStructure((byte*)&frame2, sizeof(frame2));  
+        Serial.println("Data from 2");
+        Serial.println(frame2.measurement);
+        Serial.println(frame2.senderID);
     } 
-
+    delay(100);
 }

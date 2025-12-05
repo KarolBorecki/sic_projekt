@@ -55,11 +55,16 @@ uint16_t calculateCRC(uint8_t *data, size_t len)
 const uint8_t SENSOR_ADDRS[] = {0x10, 0x11}; 
 const int NUM_SENSORS = sizeof(SENSOR_ADDRS) / sizeof(SENSOR_ADDRS[0]);
 Uart mySerial (&sercom3, 1, 0, SERCOM_RX_PAD_1, UART_TX_PAD_0);
+void SERCOM3_Handler() {
+    mySerial.IrqHandler();
+}
 
 void sendStructure(byte *structurePointer, int structureLength)
 {
     mySerial.write(structurePointer, structureLength);
     mySerial.flush();
+    Serial.write(structurePointer, structureLength);
+    Serial.flush();
 }
 
 void setup() {
@@ -72,7 +77,7 @@ void setup() {
 }
 
 void loop() {
-    Serial.println("checking");
+    // Serial.println("checking");
     for (int i = 0; i < NUM_SENSORS; i++) {
         readFromSensor(SENSOR_ADDRS[i]);
 
@@ -82,24 +87,26 @@ void loop() {
 }
 
 void readFromSensor(uint8_t address) {
+            DataFrame_t frame;
+
     uint8_t bytesReceived = Wire.requestFrom((int)address, (int)sizeof(DataFrame_t));
 
     if (bytesReceived >= sizeof(DataFrame_t)) {
-        DataFrame_t frame;
         uint8_t *pFrame = (uint8_t *)&frame;
         
         for (size_t k = 0; k < sizeof(DataFrame_t); k++) {
             pFrame[k] = Wire.read();
         }
 
-        Serial.print("Odebrano od ID: ");
-        Serial.println(frame.senderID);
-        Serial.print("Pomiar: ");
-        Serial.println(frame.measurement);
-        Serial.println("---");
-        sendStructure((byte*)&frame, sizeof(frame));   
+        // Serial.print("Odebrano od ID: ");
+        // Serial.println(frame.senderID);
+        // Serial.print("Pomiar: ");
+        // Serial.println(frame.measurement);
+        // Serial.println("---");
+         
     } else {
-        Serial.print("Błąd komunikacji z adresem: 0x");
-        Serial.println(address, HEX);
+        // Serial.print("Błąd komunikacji z adresem: 0x");
+        // Serial.println(address, HEX);
     }
+    sendStructure((byte*)&frame, sizeof(frame));  
 }
