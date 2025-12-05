@@ -33,9 +33,11 @@ typedef struct DataFrame
 #define ID_W4 (1 << 8)
 #define ID_W0 (1 << 9)
 
-uint16_t calculateCRC(uint8_t *data, size_t len)
+uint16_t calculateCRC(DataFrame_t *frame)
 {
     uint16_t crc = 0xFFFF;
+    uint8_t *data = (uint8_t *)frame;
+    size_t len = sizeof(DataFrame_t) - sizeof(uint16_t);
     for (size_t i = 0; i < len; i++)
     {
         crc ^= data[i];
@@ -50,12 +52,35 @@ uint16_t calculateCRC(uint8_t *data, size_t len)
     return crc;
 }
 
+bool checkCRC(DataFrame_t *frame)
+{
+    uint16_t receivedCRC = frame->crc;
+    frame->crc = 0;
+    uint16_t calculatedCRC = calculateCRC(frame);
+    frame->crc = receivedCRC;
+    return receivedCRC == calculatedCRC;
+}
 
+void printFrame(const char *prefix, DataFrame_t *frame)
+{
+    Serial.print(prefix);
+    Serial.print("measurement = ");
+    Serial.print(frame->measurement);
+    Serial.print(", senderID = ");
+    Serial.print(frame->senderID);
+    Serial.print(", pathMask = ");
+    Serial.print(frame->pathMask, BIN);
+    Serial.print(", crc = ");
+    Serial.println(frame->crc);
+}
 
-const uint8_t SENSOR_ADDRS[] = {0x10, 0x11}; 
+const uint16_t MY_NODE_ID = ID_W1; // or ID_W2
+const uint8_t SENSOR_ADDRS[] = {0x10, 0x11};
 const int NUM_SENSORS = sizeof(SENSOR_ADDRS) / sizeof(SENSOR_ADDRS[0]);
-Uart mySerial (&sercom3, 1, 0, SERCOM_RX_PAD_1, UART_TX_PAD_0);
-void SERCOM3_Handler() {
+Uart mySerial(&sercom3, 1, 0, SERCOM_RX_PAD_1, UART_TX_PAD_0);
+
+void SERCOM3_Handler()
+{
     mySerial.IrqHandler();
 }
 
@@ -63,50 +88,62 @@ void sendStructure(byte *structurePointer, int structureLength)
 {
     mySerial.write(structurePointer, structureLength);
     mySerial.flush();
-    Serial.write(structurePointer, structureLength);
-    Serial.flush();
+    Serial1.write(structurePointer, structureLength);
+    Serial1.flush();
 }
 
-void setup() {
-    Serial.begin(9600);
-    mySerial.begin(9600);
-    pinPeripheral(1, PIO_SERCOM); //Assign RX function to pin 1
-    pinPeripheral(0, PIO_SERCOM); //Assign TX function to pin 0
-    Wire.begin();
-    Wire.setClock(100000); 
+void updatePathMask(DataFrame_t *frame)
+{
+    frame->pathMask |= MY_NODE_ID;
+    frame->crc = calculateCRC(frame);
 }
 
-void loop() {
-    // Serial.println("checking");
-    for (int i = 0; i < NUM_SENSORS; i++) {
-        readFromSensor(SENSOR_ADDRS[i]);
-
-        delay(100);
-    }
-    delay(500);
-}
-
-void readFromSensor(uint8_t address) {
-            DataFrame_t frame;
+void readFromSensorAndPropagate(uint8_t address)
+{
+    DataFrame_t frame;
 
     uint8_t bytesReceived = Wire.requestFrom((int)address, (int)sizeof(DataFrame_t));
 
-    if (bytesReceived >= sizeof(DataFrame_t)) {
+    if (bytesReceived >= sizeof(DataFrame_t))
+    {
         uint8_t *pFrame = (uint8_t *)&frame;
-        
-        for (size_t k = 0; k < sizeof(DataFrame_t); k++) {
+
+        for (size_t k = 0; k < sizeof(DataFrame_t); k++)
+        {
             pFrame[k] = Wire.read();
         }
+        if (!checkCRC(&frame))
+        {
+            Serial.print("CRC check failed got: ");
+            Serial.println(frame.crc);
 
-        // Serial.print("Odebrano od ID: ");
-        // Serial.println(frame.senderID);
-        // Serial.print("Pomiar: ");
-        // Serial.println(frame.measurement);
-        // Serial.println("---");
-         
-    } else {
-        // Serial.print("Błąd komunikacji z adresem: 0x");
-        // Serial.println(address, HEX);
+            return;
+        }
+        updatePathMask(&frame);
+        sendStructure((byte *)&frame, sizeof(frame));
+        printFrame("Read and propagated frame: ", &frame);
     }
-    sendStructure((byte*)&frame, sizeof(frame));  
+    else
+    {
+    }
+}
+
+void setup()
+{
+    Serial.begin(UART_BAUD_RATE);
+    Serial1.begin(UART_BAUD_RATE);
+    mySerial.begin(UART_BAUD_RATE);
+    pinPeripheral(1, PIO_SERCOM);
+    pinPeripheral(0, PIO_SERCOM);
+    Wire.begin();
+    Wire.setClock(100000);
+}
+
+void loop()
+{
+    for (int i = 0; i < NUM_SENSORS; i++)
+    {
+        readFromSensorAndPropagate(SENSOR_ADDRS[i]);
+        delay(50);
+    }
 }

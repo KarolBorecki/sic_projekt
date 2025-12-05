@@ -8,8 +8,6 @@ typedef struct DataFrame
     uint16_t crc;
 } DataFrame_t;
 
-Uart mySerial (&sercom3, 1, 0, SERCOM_RX_PAD_1, UART_TX_PAD_0);
-
 #define UART_BAUD_RATE 9600
 
 #define S1_NR 0
@@ -34,9 +32,11 @@ Uart mySerial (&sercom3, 1, 0, SERCOM_RX_PAD_1, UART_TX_PAD_0);
 #define ID_W4 (1 << 8)
 #define ID_W0 (1 << 9)
 
-uint16_t calculateCRC(uint8_t *data, size_t len)
+uint16_t calculateCRC(DataFrame_t *frame)
 {
     uint16_t crc = 0xFFFF;
+    uint8_t *data = (uint8_t *)frame;
+    size_t len = sizeof(DataFrame_t) - sizeof(uint16_t);
     for (size_t i = 0; i < len; i++)
     {
         crc ^= data[i];
@@ -51,21 +51,72 @@ uint16_t calculateCRC(uint8_t *data, size_t len)
     return crc;
 }
 
+void printFrame(const char *prefix, DataFrame_t *frame)
+{
+    Serial.print(prefix);
+    Serial.print("measurement = ");
+    Serial.print(frame->measurement);
+    Serial.print(", senderID = ");
+    Serial.print(frame->senderID);
+    Serial.print(", pathMask = ");
+    Serial.print(frame->pathMask, BIN);
+    Serial.print(", crc = ");
+    Serial.println(frame->crc);
+}
 
-
-const uint8_t MY_I2C_ADDRESS = 0x10; // Adres I2C tego czujnika (zmień dla S2, S3...)
-const uint16_t MY_NODE_ID = 1;       // ID logiczne
+const uint8_t MY_I2C_ADDRESS = 0x10;
+const uint16_t MY_NODE_ID = ID_S1;
 
 DataFrame_t txFrame;
 
-void setup() {
-    Serial.begin(9600);
-    
-    // Inicjalizacja I2C jako Slave
+int readColor(int s2State, int s3State)
+{
+    digitalWrite(S2, s2State);
+    digitalWrite(S3, s3State);
+    // Czekamy chwilę na przełączenie filtra
+    delay(10);
+
+    long pulse = pulseIn(SENSOR_OUT, LOW);
+
+    int value = map(pulse, 20, 600, 255, 0);
+    return constrain(value, 0, 255);
+}
+
+void prepareFrame(uint16_t measurement)
+{
+    int r = readColor(LOW, LOW);
+    int g = readColor(HIGH, HIGH);
+    int b = readColor(LOW, HIGH);
+
+    uint16_t packedColor = ((r & 0xF8) << 8) | ((g & 0xFC) << 3) | (b >> 3);
+
+    txFrame.measurement = measurement;
+    txFrame.senderID = MY_NODE_ID;
+    txFrame.pathMask = MY_NODE_ID;
+    txFrame.crc = calculateCRC(&txFrame);
+}
+
+void requestEvent()
+{
+
+    Wire.write((uint8_t *)&txFrame, sizeof(DataFrame_t));
+}
+
+void setup()
+{
+    Serial.begin(UART_BAUD_RATE);
+
     Wire.begin(MY_I2C_ADDRESS);
-    Wire.onRequest(requestEvent); // Funkcja wywoływana, gdy Master pyta o dane
+    Wire.onRequest(requestEvent);
 
+    pinMode(S0, OUTPUT);
+    pinMode(S1, OUTPUT);
+    pinMode(S2, OUTPUT);
+    pinMode(S3, OUTPUT);
+    pinMode(SENSOR_OUT, INPUT);
 
+    digitalWrite(S0, HIGH);
+    digitalWrite(S1, LOW);
 
     txFrame.senderID = MY_NODE_ID;
     txFrame.measurement = 0;
@@ -73,17 +124,11 @@ void setup() {
     txFrame.crc = 0;
 }
 
-void loop() {
-    // Aktualizuj pomiary w pętli
-    txFrame.measurement+=3;
-    delay(1000);
-}
+void loop()
+{
+    prepareFrame(random(0, 1000));
+    printFrame("Sending frame: ", &txFrame);
+    Serial.println(txFrame.crc);
 
-// Ta funkcja wykonuje się w przerwaniu, gdy Master zażąda danych
-void requestEvent() {
-    // Oblicz CRC tuż przed wysłaniem (opcjonalne)
-    // txFrame.crc = calculateCRC(...); 
-    
-    // Wyślij całą strukturę jako bajty
-    Wire.write((uint8_t *)&txFrame, sizeof(DataFrame_t));
+    delay(500);
 }

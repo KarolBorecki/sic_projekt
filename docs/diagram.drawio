@@ -88,25 +88,25 @@
             <mxPoint x="360" y="480" as="targetPoint" />
           </mxGeometry>
         </mxCell>
-        <mxCell id="ipygsekiBr6Sz7-Zfcuu-20" value="SPI bus" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" parent="1" vertex="1">
+        <mxCell id="ipygsekiBr6Sz7-Zfcuu-20" value="I2C" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" parent="1" vertex="1">
           <mxGeometry x="410" y="450" width="60" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="ipygsekiBr6Sz7-Zfcuu-21" value="SPI bus" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" parent="1" vertex="1">
+        <mxCell id="ipygsekiBr6Sz7-Zfcuu-21" value="I2C" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" parent="1" vertex="1">
           <mxGeometry x="410" y="210" width="60" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="ipygsekiBr6Sz7-Zfcuu-22" value="I2C" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" parent="1" vertex="1">
+        <mxCell id="ipygsekiBr6Sz7-Zfcuu-22" value="UART" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" parent="1" vertex="1">
           <mxGeometry x="560" y="210" width="60" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="ipygsekiBr6Sz7-Zfcuu-23" value="I2C" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" parent="1" vertex="1">
+        <mxCell id="ipygsekiBr6Sz7-Zfcuu-23" value="UART&amp;nbsp;" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;" parent="1" vertex="1">
           <mxGeometry x="560" y="480" width="60" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="ipygsekiBr6Sz7-Zfcuu-24" value="UART" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;rotation=-45;" parent="1" vertex="1">
+        <mxCell id="ipygsekiBr6Sz7-Zfcuu-24" value="UART (soft)" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;rotation=-45;" parent="1" vertex="1">
           <mxGeometry x="540" y="400" width="60" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="ipygsekiBr6Sz7-Zfcuu-25" value="UART" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;rotation=40;" parent="1" vertex="1">
+        <mxCell id="ipygsekiBr6Sz7-Zfcuu-25" value="UART (soft)" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;rotation=40;" parent="1" vertex="1">
           <mxGeometry x="540" y="290" width="60" height="30" as="geometry" />
         </mxCell>
-        <mxCell id="ipygsekiBr6Sz7-Zfcuu-26" value="UART" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;rotation=32;" parent="1" vertex="1">
+        <mxCell id="ipygsekiBr6Sz7-Zfcuu-26" value="UART (soft)" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;rotation=32;" parent="1" vertex="1">
           <mxGeometry x="839.9998051533946" y="249.99980515339462" width="60" height="30" as="geometry" />
         </mxCell>
         <mxCell id="ipygsekiBr6Sz7-Zfcuu-27" value="UART" style="text;html=1;whiteSpace=wrap;strokeColor=none;fillColor=none;align=center;verticalAlign=middle;rounded=0;rotation=-30;" parent="1" vertex="1">

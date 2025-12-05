@@ -7,7 +7,7 @@ typedef struct DataFrame
     uint16_t senderID;
     uint32_t pathMask;
     uint16_t crc;
-} DataFrame_t ;
+} DataFrame_t;
 
 #define UART_BAUD_RATE 9600
 
@@ -33,9 +33,11 @@ typedef struct DataFrame
 #define ID_W4 (1 << 8)
 #define ID_W0 (1 << 9)
 
-uint16_t calculateCRC(uint8_t *data, size_t len)
+uint16_t calculateCRC(DataFrame_t *frame)
 {
     uint16_t crc = 0xFFFF;
+    uint8_t *data = (uint8_t *)frame;
+    size_t len = sizeof(DataFrame_t) - sizeof(uint16_t);
     for (size_t i = 0; i < len; i++)
     {
         crc ^= data[i];
@@ -50,51 +52,119 @@ uint16_t calculateCRC(uint8_t *data, size_t len)
     return crc;
 }
 
-DataFrame_t frame;
-DataFrame_t frame2;
-Uart mySerial (&sercom3, 1, 0, SERCOM_RX_PAD_1, UART_TX_PAD_0);
+bool checkCRC(DataFrame_t *frame)
+{
+    uint16_t receivedCRC = frame->crc;
+    frame->crc = 0;
+    uint16_t calculatedCRC = calculateCRC(frame);
+    frame->crc = receivedCRC;
+    return receivedCRC == calculatedCRC;
+}
 
+void printFrame(const char *prefix, DataFrame_t *frame)
+{
+    Serial.print(prefix);
+    Serial.print("measurement = ");
+    Serial.print(frame->measurement);
+    Serial.print(", senderID = ");
+    Serial.print(frame->senderID);
+    Serial.print(", pathMask = ");
+    Serial.print(frame->pathMask, BIN);
+    Serial.print(", crc = ");
+    Serial.println(frame->crc);
+}
 
-void recieveStructure(byte *structurePointer,  int structureLength)
+const uint16_t MY_NODE_ID = ID_W0;
+DataFrame_t frameSoftware;
+DataFrame_t frameHardware;
+uint8_t alive[10] = {0};
+uint32_t lastCheckTime = 0;
+uint32_t checkInterval = 1000;
+Uart mySerial(&sercom3, 1, 0, SERCOM_RX_PAD_1, UART_TX_PAD_0);
+
+void recieveStructureSoftware(byte *structurePointer, int structureLength)
 {
     mySerial.readBytes(structurePointer, structureLength);
 }
 
-void recieveStructure2(byte *structurePointer,  int structureLength)
+void recieveStructureHardware(byte *structurePointer, int structureLength)
 {
-    Serial.readBytes(structurePointer, structureLength);
+    Serial1.readBytes(structurePointer, structureLength);
 }
 
-void SERCOM3_Handler() {
+void updatePathMask(DataFrame_t *frame)
+{
+    frame->pathMask |= MY_NODE_ID;
+    frame->crc = calculateCRC(frame);
+}
+
+void checkIsEveryoneAlive()
+{
+    for (int i = 0; i < 10; i++)
+    {
+        if (alive[i] == 0)
+        {
+            Serial.print("Node ");
+            Serial.print(i);
+            Serial.println(" is not alive!");
+        }
+        alive[i] = 0;
+    }
+}
+
+void SERCOM3_Handler()
+{
     mySerial.IrqHandler();
 }
 
-void setup() {
-    Serial.begin(9600);
-    mySerial.begin(9600);
-    pinPeripheral(1, PIO_SERCOM); //Assign RX function to pin 1
-    pinPeripheral(0, PIO_SERCOM); //Assign TX function to pin 0
+void setup()
+{
+    Serial.begin(UART_BAUD_RATE);
+    Serial1.begin(UART_BAUD_RATE);
+    mySerial.begin(UART_BAUD_RATE);
+    pinPeripheral(1, PIO_SERCOM);
+    pinPeripheral(0, PIO_SERCOM);
 
-    frame.measurement = 0;
-    frame2.measurement = 0;
+    frameSoftware.measurement = 0;
+    frameHardware.measurement = 0;
 }
 
-void loop() {
-    Serial.println("Checking");
-    Serial.println(mySerial.available());
-    Serial.println(Serial.available());
-    if (mySerial.available() >= sizeof(frame)) {
-        recieveStructure((byte*)&frame, sizeof(frame));
-        Serial.println("Data from 1");
-        Serial.println(frame.measurement);
-        Serial.println(frame.senderID);
-    } 
+void loop()
+{
+    if (mySerial.available() >= sizeof(frameSoftware))
+    {
+        recieveStructureSoftware((byte *)&frameSoftware, sizeof(frameSoftware));
+        if (!checkCRC(&frameSoftware))
+        {
+            Serial.print("CRC check from software failed got: ");
+            Serial.println(frameSoftware.crc);
 
-    if (Serial.available() >= sizeof(frame2)) {
-        recieveStructure2((byte*)&frame2, sizeof(frame2));
-        Serial.println("Data from 2");
-        Serial.println(frame2.measurement);
-        Serial.println(frame2.senderID);
-    } 
-    delay(100);
+            return;
+        }
+
+        updatePathMask(&frameSoftware);
+        printFrame("Data from software: ", &frameSoftware);
+        sendStructure((byte *)&frameSoftware, sizeof(frameSoftware));
+    }
+
+    if (Serial1.available() >= sizeof(frameHardware))
+    {
+        recieveStructureHardware((byte *)&frameHardware, sizeof(frameHardware));
+        if (!checkCRC(&frameHardware))
+        {
+            Serial.print("CRC check from hardware failed got: ");
+            Serial.println(frameHardware.crc);
+
+            return;
+        }
+        updatePathMask(&frameHardware);
+        printFrame("Data from hardware: ", &frameHardware);
+        sendStructure((byte *)&frameHardware, sizeof(frameHardware));
+    }
+
+    if (millis() - lastCheckTime >= checkInterval)
+    {
+        checkIsEveryoneAlive();
+        lastCheckTime = millis();
+    }
 }
